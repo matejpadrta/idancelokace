@@ -1,0 +1,1206 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Taneční sál</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Layout: celoobrazovková 3D scéna; ovládací panely se vznášejí po okrajích. Akcent je žlutá barva dveří sálu. */
+  :root {
+    --bg: #e8eaec;
+    --fg: #1c2024;
+    --muted: #5b646c;
+    --panel: rgba(250, 251, 252, 0.9);
+    --line: #c9cfd4;
+    --accent: #e0a928;
+    --on-accent: #221a06;
+    --scene: #dde1e4;
+    --floor-map: #d9b27a;
+    --display: 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171a; --fg: #e9ecee; --muted: #98a2aa;
+      --panel: rgba(24, 28, 32, 0.88); --line: #343c43; --scene: #1a1e22; --floor-map: #6b4a22;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171a; --fg: #e9ecee; --muted: #98a2aa;
+    --panel: rgba(24, 28, 32, 0.88); --line: #343c43; --scene: #1a1e22; --floor-map: #6b4a22;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--display); overflow: hidden; }
+  #app { position: relative; width: 100%; height: 100%; overflow: hidden; }
+  #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  #gl:active { cursor: grabbing; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .top { position: absolute; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; pointer-events: none; }
+  .top > * { pointer-events: auto; min-width: 0; }
+  .title { padding: 12px 14px 10px; }
+  h1 { margin: 0; font-size: 1.15rem; line-height: 1.1; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+  .dim { margin: 4px 0 8px; font-family: var(--mono); font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #map { display: block; width: 200px; height: 74px; max-width: 100%; }
+  .note { margin: 8px 0 0; font-size: 0.7rem; line-height: 1.35; color: var(--muted); max-width: 200px; }
+
+  .seg { display: flex; padding: 3px; gap: 2px; }
+  .seg button { font: 500 0.82rem var(--display); color: var(--fg); background: transparent; border: 0; border-radius: 7px; padding: 8px 12px; cursor: pointer; }
+  .seg button.on { background: var(--accent); color: var(--on-accent); }
+  #light { flex-wrap: wrap; justify-content: flex-end; }
+  #light button { padding: 8px 9px; font-size: 0.78rem; }
+  .right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .vig { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 50% 55%, rgba(8, 10, 14, 0) 52%, rgba(8, 10, 14, 0.8) 100%); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .bottom { position: absolute; left: 16px; right: 16px; bottom: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+  .bottom > * { pointer-events: auto; max-width: 100%; }
+  .views { display: flex; gap: 4px; padding: 4px; overflow-x: auto; }
+  .views button { flex: none; font: 500 0.8rem var(--display); color: var(--fg); background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 8px 12px; cursor: pointer; white-space: nowrap; }
+  .views button:hover { border-color: var(--line); }
+  .views button.on { background: var(--accent); color: var(--on-accent); }
+  .hint { margin: 0; font-size: 0.72rem; color: var(--muted); text-align: center; text-shadow: 0 0 6px var(--bg), 0 0 2px var(--bg); }
+
+  .pad { position: absolute; right: 16px; bottom: 96px; display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(2, 44px); gap: 4px; }
+  .pad button { font: 500 1.1rem var(--display); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none; }
+  .pad button:active { background: var(--accent); color: var(--on-accent); }
+  .pad [data-dir="f"] { grid-column: 2; grid-row: 1; }
+  .pad [data-dir="l"] { grid-column: 1; grid-row: 2; }
+  .pad [data-dir="b"] { grid-column: 2; grid-row: 2; }
+  .pad [data-dir="r"] { grid-column: 3; grid-row: 2; }
+  .pad[hidden] { display: none; }
+  @media (max-width: 520px) { .top { flex-direction: column; align-items: stretch; } .seg { align-self: flex-end; } .title { align-self: flex-start; } .pad { bottom: 100px; } }
+  @media (max-width: 520px) { .top { flex-direction: column-reverse; } }
+  #app { background: #0b0c0e; }
+  #gl, .vig, .tint { right: auto; bottom: auto; }
+  .tint { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: #5d86d0; mix-blend-mode: soft-light; }
+  .side { position: absolute; left: 16px; bottom: 96px; width: 236px; max-height: calc(100% - 300px); overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+  .sec { padding: 8px 10px; font-size: 0.78rem; }
+  .sec summary { cursor: pointer; font-weight: 700; font-size: 0.85rem; }
+  .sec label { display: flex; justify-content: space-between; margin-top: 8px; color: var(--muted); font: 0.7rem var(--mono); }
+  .sec input[type=range] { width: 100%; accent-color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .chips button, .sec select { font: 500 0.75rem var(--display); color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; cursor: pointer; }
+  .chips button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .chips button:disabled { opacity: .4; cursor: default; }
+  .sec select { width: 100%; margin-top: 6px; background: var(--panel); }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div id="app">
+  <canvas id="gl" aria-label="3D model tanečního sálu"></canvas>
+  <div class="vig" id="vig"></div>
+  <div class="tint" id="tint"></div>
+
+  <div class="top">
+    <div class="panel title">
+      <h1>Taneční sál</h1>
+      <p class="dim">Sál 18 × 6 m · místnost 6 × 3,5 m</p>
+      <canvas id="map"></canvas>
+      <p class="note">Orientační model podle fotek, ne přesná kopie.</p>
+    </div>
+    <div class="right">
+      <div class="panel seg" role="group" aria-label="Režim pohledu">
+        <button type="button" data-mode="walk" class="on">Procházka</button>
+        <button type="button" data-mode="cam">Kamera</button>
+        <button type="button" data-mode="top">Shora</button>
+      </div>
+      <div class="panel seg" id="light" role="group" aria-label="Světelná atmosféra">
+        <button type="button" data-tod="day" class="on">Den 5600 K</button>
+        <button type="button" data-tod="warm">Teplé 2800 K</button>
+        <button type="button" data-tod="gloom">Ponuré, chladné</button>
+        <button type="button" data-tod="neutral">Bez efektů</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="pad" id="pad" aria-label="Pohyb">
+    <button type="button" data-dir="f" aria-label="Dopředu">↑</button>
+    <button type="button" data-dir="l" aria-label="Doleva">←</button>
+    <button type="button" data-dir="b" aria-label="Dozadu">↓</button>
+    <button type="button" data-dir="r" aria-label="Doprava">→</button>
+  </div>
+
+  <div class="side">
+    <details class="panel sec" id="camP" hidden open><summary>Kamera</summary>
+      <label>Ohnisko <b id="vF"></b></label><input type="range" id="iF" min="12" max="125" step="1" value="35">
+      <div class="chips" id="fChips"></div>
+      <label>Výška <b id="vH"></b></label><input type="range" id="iH" min="0.1" max="3.7" step="0.05" value="1.6">
+      <label>Sklon nahoru/dolů <b id="vP"></b></label><input type="range" id="iP" min="-85" max="85" step="1" value="0">
+      <label>Náklon (roll) <b id="vR"></b></label><input type="range" id="iR" min="-45" max="45" step="1" value="0">
+      <div class="chips"><button type="button" id="rRoll">Vyrovnat horizont</button></div>
+      <label>Poměr stran</label><select id="iA"></select>
+      <p class="note" id="camInfo"></p>
+      <p class="note">Plný formát 36 mm · R/F mění výšku</p>
+    </details>
+    <details class="panel sec" id="figP" open><summary>Postavy</summary>
+      <label>Póza (vybrané / nové)</label><div class="chips" id="poseChips"></div>
+      <div class="chips"><button type="button" id="fAdd">+ Přidat postavu</button></div>
+      <label>Postavy</label><div class="chips" id="figList"></div>
+      <label>Otočení <b id="vY"></b></label><input type="range" id="iY" min="0" max="359" step="1" value="0">
+      <div class="chips"><button type="button" id="fDel">Smazat vybranou</button><button type="button" id="fClr">Smazat vše</button></div>
+      <p class="note">Při otevřeném panelu můžeš postavy přetahovat po podlaze.</p>
+    </details>
+  </div>
+
+  <div class="bottom">
+    <div class="panel views" id="views" role="group" aria-label="Místa v sále"></div>
+    <p class="hint" id="hint"></p>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/objects/Reflector.js"></script>
+<script>
+(function () {
+  var L = 18, W = 6, H = 3.9, EYE = 1.6, D = 3.5, DZ = 0.85, LT = L + D;
+  var PI = Math.PI;
+
+  /* ---------- pomocné funkce ---------- */
+  function cv(w, h, draw, repeat) {
+    var c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    draw(c.getContext('2d'), w, h);
+    var t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 4;
+    if (repeat) t.repeat.set(repeat[0], repeat[1]);
+    return t;
+  }
+  function seeded(seed) { var s = seed; return function () { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
+
+  function slatTex(wm, hm) {
+    return cv(32, 64, function (g, w, h) {
+      g.fillStyle = '#241e1a'; g.fillRect(0, 0, w, h);
+      var gr = g.createLinearGradient(0, 14, 0, h);
+      gr.addColorStop(0, '#caa072'); gr.addColorStop(1, '#a87a4b');
+      g.fillStyle = gr; g.fillRect(0, 14, w, h - 14);
+      var r = seeded(7);
+      g.strokeStyle = 'rgba(90,55,25,.25)'; g.lineWidth = 1;
+      for (var i = 0; i < 6; i++) { var y = 18 + r() * (h - 22); g.beginPath(); g.moveTo(0, y); g.lineTo(w, y + (r() - .5) * 2); g.stroke(); }
+    }, [1, hm / 0.09]);
+  }
+  function floorTex() {
+    return cv(256, 256, function (g, w, h) {
+      g.fillStyle = '#b9782b'; g.fillRect(0, 0, w, h);
+      var r = seeded(11);
+      for (var i = 0; i < 90; i++) {
+        g.fillStyle = 'rgba(' + (r() > .5 ? '255,200,120' : '90,45,10') + ',' + (0.03 + r() * 0.05) + ')';
+        g.beginPath(); g.ellipse(r() * w, r() * h, 20 + r() * 50, 6 + r() * 16, r() * PI, 0, 2 * PI); g.fill();
+      }
+      for (var sj = 0; sj < 46; sj++) {
+        g.strokeStyle = 'rgba(255,226,170,' + (0.05 + r() * 0.09).toFixed(3) + ')'; g.lineWidth = 0.6;
+        var sx0 = r() * w, sy0 = r() * h, sa = r() * PI, sl = 10 + r() * 42;
+        g.beginPath(); g.moveTo(sx0, sy0); g.lineTo(sx0 + Math.cos(sa) * sl, sy0 + Math.sin(sa) * sl); g.stroke();
+      }
+      g.fillStyle = 'rgba(70,35,8,.55)'; g.fillRect(0, h - 2, w, 2);
+    }, [L / 6, W / 1.5]);
+  }
+  function ceilTex() {
+    return cv(16, 16, function (g, w, h) {
+      g.fillStyle = '#f4f0e7'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#cdc5b3'; g.fillRect(0, h - 2, w, 2);
+    }, [1, W / 0.14]);
+  }
+  function blindTex(hm) {
+    return cv(16, 32, function (g, w, h) {
+      g.fillStyle = '#e4e8ea'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#9ea8ad'; g.fillRect(0, h - 4, w, 4);
+    }, [1, hm / 0.05]);
+  }
+  function curtainTex() {
+    return cv(512, 64, function (g, w, h) {
+      g.clearRect(0, 0, w, h);
+      for (var x = 0; x < w; x++) {
+        var a = 0.5 + 0.5 * Math.sin(x / w * 2 * PI * 38) * Math.sin(x / w * 2 * PI * 7 + 1);
+        g.fillStyle = 'rgba(255,255,255,' + (0.34 + 0.3 * a).toFixed(3) + ')';
+        g.fillRect(x, 0, 1, h);
+      }
+    });
+  }
+  function mirrorTex() {
+    return cv(8, 256, function (g, w, h) {
+      var gr = g.createLinearGradient(0, 0, 0, h);
+      gr.addColorStop(0, '#dfe7ea'); gr.addColorStop(0.35, '#c4d0d5'); gr.addColorStop(0.62, '#b7a58f');
+      gr.addColorStop(0.72, '#b27d3c'); gr.addColorStop(1, '#a56d2b');
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    });
+  }
+  function clockTex() {
+    return cv(128, 128, function (g) {
+      g.fillStyle = '#5a3a28'; g.beginPath(); g.arc(64, 64, 63, 0, 2 * PI); g.fill();
+      g.fillStyle = '#f7f7f4'; g.beginPath(); g.arc(64, 64, 54, 0, 2 * PI); g.fill();
+      g.strokeStyle = '#222'; g.lineWidth = 3;
+      for (var i = 0; i < 12; i++) { var a = i * PI / 6; g.beginPath(); g.moveTo(64 + Math.sin(a) * 46, 64 - Math.cos(a) * 46); g.lineTo(64 + Math.sin(a) * 52, 64 - Math.cos(a) * 52); g.stroke(); }
+      g.lineWidth = 4; g.beginPath(); g.moveTo(64, 64); g.lineTo(64 + Math.sin(2.7) * 28, 64 - Math.cos(2.7) * 28); g.stroke();
+      g.lineWidth = 3; g.beginPath(); g.moveTo(64, 64); g.lineTo(64 + Math.sin(0.15) * 42, 64 - Math.cos(0.15) * 42); g.stroke();
+    });
+  }
+
+  /* ---------- scéna ---------- */
+  var canvas = document.getElementById('gl');
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(70, 1, 0.05, 200);
+
+  function readScene() {
+    var v = getComputedStyle(document.documentElement).getPropertyValue('--scene').trim() || '#dde1e4';
+    scene.background = new THREE.Color(v);
+  }
+  readScene();
+  var mq = window.matchMedia('(prefers-color-scheme: dark)');
+  if (mq.addEventListener) mq.addEventListener('change', function () { readScene(); mapDirty = true; });
+
+  var ambient = new THREE.AmbientLight(0xffffff, 0.5); scene.add(ambient);
+  var hemi = new THREE.HemisphereLight(0xffffff, 0xb08a5a, 0.4); scene.add(hemi);
+  var lights = [];   /* {l, base, zone: hall|room, kind: ceil (stropní) | win (světlo z oken)} */
+  function addLight(x, y, z, base, dist, zone, kind) {
+    var p = new THREE.PointLight(0xfff3e0, kind === 'ceil' ? base : 0, dist, 1);
+    p.position.set(x, y, z); scene.add(p);
+    lights.push({ l: p, base: base, zone: zone, kind: kind });
+  }
+  [4, 9, 14].forEach(function (x) { addLight(x, H - 0.4, W / 2, 0.32, 13, 'hall', 'ceil'); });
+  [2, 5.5, 9, 12.5, 16].forEach(function (x) { addLight(x, 2.4, W - 0.7, 1, 11, 'hall', 'win'); });
+
+  var mat = {
+    wall: new THREE.MeshLambertMaterial({ color: 0xf3f3ef }),
+    floor: new THREE.MeshStandardMaterial({ map: floorTex(), roughness: 0.28, metalness: 0.04 }),
+    ceil: new THREE.MeshLambertMaterial({ map: ceilTex() }),
+    lamp: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+    frame: new THREE.MeshLambertMaterial({ color: 0xf6f6f3 }),
+    wood: new THREE.MeshLambertMaterial({ color: 0xb98150 }),
+    doorLeaf: new THREE.MeshLambertMaterial({ color: 0xe0a928 }),
+    doorFrame: new THREE.MeshLambertMaterial({ color: 0x5b1f16 }),
+    metal: new THREE.MeshLambertMaterial({ color: 0xb9bec2 }),
+    glass: new THREE.MeshBasicMaterial({ color: 0xcfd9dd }),
+    black: new THREE.MeshLambertMaterial({ color: 0x25272a })
+  };
+  var mirrorMap = mirrorTex();
+  var mirrorA = new THREE.MeshBasicMaterial({ map: mirrorMap, color: 0xffffff });
+  var mirrorB = new THREE.MeshBasicMaterial({ map: mirrorMap, color: 0xefefef });
+
+  function add(m) { scene.add(m); return m; }
+  function plane(w, h, material, x, y, z, rx, ry) {
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, h, Math.min(40, Math.max(1, Math.ceil(w / 0.7))), Math.min(14, Math.max(1, Math.ceil(h / 0.7)))), material);
+    m.position.set(x, y, z); m.rotation.x = rx || 0; m.rotation.y = ry || 0; return add(m);
+  }
+  function box(w, h, d, material, x, y, z) {
+    var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+    m.position.set(x, y, z); return add(m);
+  }
+  function cyl(r, len, material, x, y, z, axis) {
+    var m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12), material);
+    m.position.set(x, y, z);
+    if (axis === 'x') m.rotation.z = PI / 2; else if (axis === 'z') m.rotation.x = PI / 2;
+    return add(m);
+  }
+
+  /* podlaha a strop (plochy jsou jednostranné, takže shora jsou průhledné) */
+  plane(L, W, mat.floor, L / 2, 0, W / 2, -PI / 2, 0);
+  plane(L, W, mat.ceil, L / 2, H, W / 2, PI / 2, 0);
+
+  /* stěny, vždy lícem do sálu */
+  plane(L, H, mat.wall, L / 2, H / 2, 0, 0, 0);              /* zrcadlová stěna */
+  plane(L, H, mat.wall, L / 2, H / 2, W, 0, PI);             /* okenní stěna */
+  /* konec A: celá lamely, s otvorem pro dveře do vedlejší místnosti */
+  var slatFull = new THREE.MeshLambertMaterial({ map: slatTex(1, H), color: 0xffffff });
+  var slatTop = new THREE.MeshLambertMaterial({ map: slatTex(1, H - 2.2), color: 0xffffff });
+  plane(DZ - 0.46, H, slatFull, L, H / 2, (DZ - 0.46) / 2, 0, -PI / 2);
+  plane(W - (DZ + 0.46), H, slatFull, L, H / 2, DZ + 0.46 + (W - (DZ + 0.46)) / 2, 0, -PI / 2);
+  plane(0.92, H - 2.2, slatTop, L, 2.2 + (H - 2.2) / 2, DZ, 0, -PI / 2);
+  plane(W, H, mat.wall, 0, H / 2, W / 2, 0, PI / 2);          /* konec B: bílá nahoře */
+  plane(W, 2.1, new THREE.MeshLambertMaterial({ map: slatTex(1, 2.1) }), 0.002, 1.05, W / 2, 0, PI / 2);  /* konec B: pás lamel */
+
+  /* stropní svítidla */
+  for (var row = 0; row < 2; row++) {
+    for (var i = 0; i < 6; i++) plane(0.6, 0.6, mat.lamp, 1.6 + i * 3, H - 0.003, row ? 4.4 : 1.7, PI / 2, 0);
+  }
+
+  /* skutečné odrazy: THREE.Reflector vykreslí sál z druhé strany zrcadla; bez skriptu zůstanou statická zrcadla */
+  var HAS_REFL = !!THREE.Reflector, reflectors = [], mirQuads = [];
+  var DPRR = Math.min(window.devicePixelRatio || 1, 1.5);
+  var RTW = Math.max(512, Math.min(1600, Math.round(window.innerWidth * DPRR * 0.8)));
+  var RTH = Math.max(384, Math.min(1000, Math.round(window.innerHeight * DPRR * 0.8)));
+  function makeMirror(geo, x, y, z, rx, ry, opt) {
+    if (!HAS_REFL) return null;
+    var oo = { color: new THREE.Color(0.47, 0.49, 0.5), textureWidth: RTW, textureHeight: RTH, clipBias: 0.003 };
+    if (opt && opt.shader) oo.shader = opt.shader;
+    var r = new THREE.Reflector(geo, oo);
+    r.position.set(x, y, z); r.rotation.set(rx || 0, ry || 0, 0);
+    if (opt && opt.soft) { r.material.transparent = true; r.material.depthWrite = false; r.renderOrder = 2; }
+    add(r); reflectors.push(r); return r;
+  }
+  function wire(pts, col) {
+    var g = new THREE.BufferGeometry().setFromPoints(pts.map(function (q) { return new THREE.Vector3(q[0], q[1], q[2]); }));
+    scene.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: col || 0xb9bcbf })));
+  }
+
+  /* zrcadla s tyčemi na dlouhé stěně */
+  function mirrorGroup(x0, x1, n) {
+    var w = x1 - x0, cx = (x0 + x1) / 2, top = 2.45, bot = 0.12, h = top - bot;
+    box(w + 0.16, h + 0.16, 0.06, mat.frame, cx, bot + h / 2, 0.03);
+    mirQuads.push([x0, x1, bot, top]);
+    for (var k = 0; k < n; k++) {
+      var sw = w / n;
+      plane(sw - 0.01, h, k % 2 ? mirrorB : mirrorA, x0 + sw * (k + 0.5), bot + h / 2, 0.065);
+      if (k) box(0.014, h, 0.004, mat.black, x0 + sw * k, bot + h / 2, 0.08);
+    }
+    /* bílá tyč nad zrcadly s konzolami a lanky ke zdi */
+    cyl(0.02, w + 0.4, mat.frame, cx, 2.66, 0.28, 'x');
+    [x0 + 0.3, x1 - 0.3].forEach(function (bx) { box(0.03, 0.03, 0.26, mat.frame, bx, 2.64, 0.15); });
+    wire([[x0, 2.66, 0.28], [x0 + 0.5, 3.15, 0.02]]);
+    wire([[x1, 2.66, 0.28], [x1 - 0.5, 3.15, 0.02]]);
+    [0.78, 1.08].forEach(function (y) {
+      cyl(0.028, w, mat.wood, cx, y, 0.4, 'x');
+      var brackets = Math.max(2, Math.round(w / 1.6) + 1);
+      for (var b = 0; b < brackets; b++) {
+        var bx = x0 + 0.15 + (w - 0.3) * b / (brackets - 1);
+        box(0.035, 0.035, 0.36, mat.frame, bx, y - 0.03, 0.22);
+      }
+    });
+  }
+  mirrorGroup(0.5, 6.4, 4);
+  mirrorGroup(7.6, 10.0, 3);
+  mirrorGroup(11.2, 15.6, 3);
+  if (HAS_REFL) {
+    var xmg = new THREE.BufferGeometry(), xmp = [], xmi = [];
+    mirQuads.forEach(function (q, i) {
+      xmp.push(q[0], q[2], 0, q[1], q[2], 0, q[1], q[3], 0, q[0], q[3], 0);
+      xmi.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3);
+    });
+    xmg.setAttribute('position', new THREE.Float32BufferAttribute(xmp, 3)); xmg.setIndex(xmi);
+    makeMirror(xmg, 0, 0, 0.075, 0, 0);
+  }
+  /* prasklina ve spodním rohu zrcadla vedle dveří */
+  wire([[9.62, 0.42, 0.086], [9.8, 0.26, 0.086], [9.93, 0.14, 0.086]], 0x6d7479);
+  wire([[9.8, 0.26, 0.086], [9.97, 0.31, 0.086]], 0x6d7479);
+  wire([[9.8, 0.26, 0.086], [9.72, 0.14, 0.086]], 0x6d7479);
+
+  /* žluté dveře ve zrcadlové stěně + okno nad nimi */
+  function doorOnZ0(cx) {
+    box(1.1, 2.2, 0.08, mat.doorFrame, cx, 1.1, 0.04);
+    box(0.92, 2.1, 0.05, mat.doorLeaf, cx, 1.05, 0.085);
+    box(0.12, 0.03, 0.06, mat.metal, cx + 0.34, 1.0, 0.13);
+  }
+  doorOnZ0(10.6);
+  box(1.5, 0.9, 0.05, mat.frame, 10.0, 3.25, 0.03);
+  plane(1.34, 0.76, mat.glass, 10.0, 3.25, 0.06);
+
+  /* pilíř s hodinami */
+  box(1.0, H, 0.38, mat.frame, 7.0, H / 2, 0.19);
+  box(0.9, 2.0, 0.02, new THREE.MeshLambertMaterial({ map: slatTex(1, 2.0) }), 7.0, 1.0, 0.39);
+  var clock = new THREE.Mesh(new THREE.CircleGeometry(0.24, 32), new THREE.MeshBasicMaterial({ map: clockTex() }));
+  clock.position.set(7.0, 2.95, 0.395); add(clock);
+
+  /* kratší stěna s lamelami: dveře */
+  box(0.1, 2.2, 0.07, mat.doorFrame, L - 0.05, 1.1, DZ - 0.495);
+  box(0.1, 2.2, 0.07, mat.doorFrame, L - 0.05, 1.1, DZ + 0.495);
+  box(0.1, 0.07, 1.06, mat.doorFrame, L - 0.05, 2.165, DZ);
+  box(0.92, 2.1, 0.05, mat.doorLeaf, L - 0.52, 1.05, DZ - 0.49);   /* otevřená křídla do sálu */
+
+  /* protější kratší stěna: zrcadlo, tyče, dveře */
+  box(0.06, 2.36, 3.46, mat.frame, 0.03, 1.3, 3.85);
+  plane(3.3, 2.2, mirrorA, 0.065, 1.3, 3.85, 0, PI / 2);
+  makeMirror(new THREE.PlaneGeometry(3.3, 2.2), 0.075, 1.3, 3.85, 0, PI / 2);
+  [0.78, 1.08].forEach(function (y) { cyl(0.028, 3.3, mat.wood, 0.4, y, 3.85, 'z'); });
+  box(0.08, 2.2, 1.1, mat.doorFrame, 0.04, 1.1, 1.35);
+  box(0.05, 2.1, 0.92, mat.doorLeaf, 0.085, 1.05, 1.35);
+  box(0.03, 0.04, 0.92, mat.wood, 0.3, 0.86, 1.35);
+  box(0.03, 0.04, 0.92, mat.wood, 0.3, 0.05, 1.35);
+  for (var gb = 0; gb < 9; gb++) box(0.02, 0.8, 0.025, mat.wood, 0.3, 0.45, 0.93 + gb * 0.105);   /* zábrana před dveřmi */
+
+  /* okenní stěna: okna se žaluziemi, záclony, radiátorový kryt */
+  var segs = 12, segW = (L - 0.6) / segs;
+  var blind = new THREE.MeshBasicMaterial({ map: blindTex(2.7) });
+  for (var s = 0; s < segs; s++) {
+    var sx = 0.3 + segW * (s + 0.5);
+    plane(segW - 0.1, 2.7, blind, sx, 2.25, W - 0.04, 0, PI);
+    box(0.1, 2.7, 0.1, mat.frame, 0.3 + segW * s, 2.25, W - 0.06);
+  }
+  box(0.1, 2.7, 0.1, mat.frame, L - 0.3, 2.25, W - 0.06);
+  box(L - 0.5, 0.06, 0.1, mat.frame, L / 2, 0.92, W - 0.06);
+  box(L - 0.5, 0.06, 0.1, mat.frame, L / 2, 3.6, W - 0.06);
+  box(L - 0.5, 0.86, 0.42, mat.frame, L / 2, 0.43, W - 0.21);
+  plane(L - 0.5, 0.82, new THREE.MeshLambertMaterial({ map: slatTex(1, 0.82) }), L / 2, 0.43, W - 0.422, 0, PI);
+  var curtain = new THREE.Mesh(new THREE.PlaneGeometry(L - 0.8, 1.85),
+    new THREE.MeshLambertMaterial({ map: curtainTex(), transparent: true, side: THREE.DoubleSide, depthWrite: false, color: 0xffffff }));
+  curtain.position.set(L / 2, 2.78, W - 0.3); curtain.rotation.y = PI; add(curtain);
+
+  /* světelné paprsky a skvrny od slunce skrz okna (zapínají se jen v procházce za dne) */
+  function shaftTex() {
+    var c = document.createElement('canvas'); c.width = 32; c.height = 64;
+    var g = c.getContext('2d'), im = g.createImageData(32, 64);
+    for (var y = 0; y < 64; y++) for (var x = 0; x < 32; x++) {
+      var u = x / 31, v = y / 63, a = Math.pow(Math.sin(PI * u), 2) * (0.55 * (1 - v) + 0.06), i = (y * 32 + x) * 4;
+      im.data[i] = 255; im.data[i + 1] = 255; im.data[i + 2] = 255; im.data[i + 3] = Math.round(a * 255);
+    }
+    g.putImageData(im, 0, 0);
+    return new THREE.CanvasTexture(c);
+  }
+  function patchTex() {
+    var c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    var g = c.getContext('2d'), im = g.createImageData(64, 64);
+    function sm(t) { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); }
+    for (var y = 0; y < 64; y++) for (var x = 0; x < 64; x++) {
+      var u = x / 63, v = y / 63, a = sm(Math.min(u, 1 - u) * 5) * sm(Math.min(v, 1 - v) * 5) * 0.9, i = (y * 64 + x) * 4;
+      if (Math.abs(u - 0.5) < 0.03) a *= 0.35;
+      im.data[i] = 255; im.data[i + 1] = 255; im.data[i + 2] = 255; im.data[i + 3] = Math.round(a * 255);
+    }
+    g.putImageData(im, 0, 0);
+    return new THREE.CanvasTexture(c);
+  }
+  var shaftMat = new THREE.MeshBasicMaterial({ map: shaftTex(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, color: 0xfff0d0 });
+  var patchMat = new THREE.MeshBasicMaterial({ map: patchTex(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, color: 0xfff0d0 });
+  var shaftGroup = new THREE.Group(); shaftGroup.visible = false; scene.add(shaftGroup);
+  var upV = new THREE.Vector3(), q1 = new THREE.Quaternion(), qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), PI / 2);
+  for (var bi = 0; bi < segs; bi++) {
+    var bx = 0.3 + segW * (bi + 0.5);
+    var bFrom = new THREE.Vector3(bx, 3.4, W - 0.1), bTo = new THREE.Vector3(bx + 1.2, 0.02, W - 2.4);
+    upV.subVectors(bFrom, bTo); var bLen = upV.length(); upV.normalize();
+    q1.setFromUnitVectors(new THREE.Vector3(0, 1, 0), upV);
+    var bMid = bFrom.clone().add(bTo).multiplyScalar(0.5);
+    [0, 1].forEach(function (j) {
+      var bm = new THREE.Mesh(new THREE.PlaneGeometry(segW * 0.8, bLen), shaftMat);
+      bm.position.copy(bMid); bm.quaternion.copy(q1); if (j) bm.quaternion.multiply(qy);
+      shaftGroup.add(bm);
+    });
+    var pm = new THREE.Mesh(new THREE.PlaneGeometry(segW * 0.85, 1.7), patchMat);
+    pm.rotation.x = -PI / 2; pm.position.set(bTo.x, 0.015, bTo.z); shaftGroup.add(pm);
+  }
+  var glassMats = [blind];
+
+  /* ---------- detaily sálu podle fotek ---------- */
+  /* rámy stropních svítidel */
+  for (var lr = 0; lr < 2; lr++) for (var li = 0; li < 6; li++) {
+    var lcx = 1.6 + li * 3, lcz = lr ? 4.4 : 1.7;
+    box(0.68, 0.03, 0.04, mat.frame, lcx, H - 0.015, lcz - 0.32); box(0.68, 0.03, 0.04, mat.frame, lcx, H - 0.015, lcz + 0.32);
+    box(0.04, 0.03, 0.6, mat.frame, lcx - 0.32, H - 0.015, lcz); box(0.04, 0.03, 0.6, mat.frame, lcx + 0.32, H - 0.015, lcz);
+  }
+  /* okna: příčky (spodní křídlo, nadsvětlík), kliky, garnýž, zásuvky na krytu radiátoru */
+  box(L - 0.5, 0.05, 0.09, mat.frame, L / 2, 1.55, W - 0.06);
+  box(L - 0.5, 0.05, 0.09, mat.frame, L / 2, 3.12, W - 0.06);
+  for (var wh = 1; wh < segs; wh++) box(0.025, 0.14, 0.05, mat.metal, 0.3 + segW * wh - 0.09, 1.95, W - 0.1);
+  cyl(0.015, L - 0.8, mat.metal, L / 2, 3.74, W - 0.3, 'x');
+  [4.2, 9.4].forEach(function (zx) { box(0.09, 0.09, 0.02, mat.frame, zx, 0.6, W - 0.43); });
+  /* láhve na parapetu (v zrcadle na fotkách) */
+  cyl(0.04, 0.24, lam(0x49a39f), 14.6, 0.98, W - 0.3);
+  cyl(0.04, 0.24, lam(0x2a3a55), 14.75, 0.98, W - 0.3);
+  /* mop u sloupu */
+  var mop = cyl(0.012, 1.45, lam(0x3a3c40), 6.5, 0.72, 0.5); mop.rotation.z = -0.06;
+  /* dřevěná židle u zrcadla na konci sálu */
+  (function (cx, cz) {
+    var wc = lam(0xd9b46f);
+    box(0.42, 0.04, 0.42, wc, cx, 0.45, cz);
+    box(0.03, 0.8, 0.42, wc, cx - 0.2, 0.62, cz);
+    box(0.02, 0.12, 0.34, wc, cx - 0.2, 0.78, cz); box(0.02, 0.12, 0.34, wc, cx - 0.2, 0.98, cz);
+    [[-0.19, -0.19], [-0.19, 0.19], [0.19, -0.19], [0.19, 0.19]].forEach(function (q) { box(0.03, 0.43, 0.03, wc, cx + q[0], 0.215, cz + q[1]); });
+  })(0.85, 5.0);
+
+  /* ---------- postava: jednoduchý stickman (vidět je jen v odrazech a z pohledu shora) ---------- */
+  var man = new THREE.Group(), manMat = lam(0x2b2e33);
+  function mpart(geo, x, y, z, parent) { var m = new THREE.Mesh(geo, manMat); m.position.set(x, y, z); (parent || man).add(m); return m; }
+  function mlimb(len, x, y) { var pv = new THREE.Group(); pv.position.set(x, y, 0); mpart(new THREE.CylinderGeometry(0.024, 0.024, len, 8), 0, -len / 2, 0, pv); man.add(pv); return pv; }
+  mpart(new THREE.SphereGeometry(0.11, 14, 10), 0, 1.62, 0);
+  mpart(new THREE.CylinderGeometry(0.024, 0.024, 0.58, 8), 0, 1.2, 0);
+  mpart(new THREE.CylinderGeometry(0.024, 0.024, 0.4, 8), 0, 1.46, 0).rotation.z = PI / 2;
+  mpart(new THREE.CylinderGeometry(0.024, 0.024, 0.18, 8), 0, 0.92, 0).rotation.z = PI / 2;
+  var armL = mlimb(0.62, -0.2, 1.46), armR = mlimb(0.62, 0.2, 1.46), legL = mlimb(0.92, -0.09, 0.92), legR = mlimb(0.92, 0.09, 0.92);
+  man.visible = false; man.userData = { ph: 0, amp: 0 }; scene.add(man);
+
+  /* lesklá podlaha sálu: jemný odraz (poloprůhledný Reflector) */
+  if (HAS_REFL) {
+    var fsh = THREE.Reflector.ReflectorShader;
+    var fre = /gl_FragColor\s*=\s*vec4\(\s*blendOverlay\(\s*base\.rgb\s*,\s*color\s*\)\s*,\s*1\.0\s*\)\s*;/;
+    if (fre.test(fsh.fragmentShader)) {
+      makeMirror(new THREE.PlaneGeometry(L, W), L / 2, 0.004, W / 2, -PI / 2, 0, {
+        soft: true,
+        shader: { uniforms: fsh.uniforms, vertexShader: fsh.vertexShader, fragmentShader: fsh.fragmentShader.replace(fre, 'gl_FragColor = vec4( base.rgb, 0.3 );') }
+      });
+    }
+    /* postava se kreslí jen během vykreslení odrazu; ostatní odrazy se při něm skryjí (jejich místo drží statické panely) */
+    reflectors.forEach(function (rf) {
+      var orig = rf.onBeforeRender;
+      rf.onBeforeRender = function () {
+        var others = reflectors.filter(function (q) { return q !== rf && q.visible; });
+        others.forEach(function (q) { q.visible = false; });
+        man.visible = true;
+        orig.apply(this, arguments);
+        man.visible = (mode === 'top');
+        others.forEach(function (q) { q.visible = true; });
+      };
+    });
+  }
+
+  /* rekvizity */
+  box(1.0, 0.9, 0.1, new THREE.MeshLambertMaterial({ color: 0x1f9d8f }), 1.2, 0.45, 0.62).rotation.x = -0.12;
+  box(0.9, 0.22, 0.5, new THREE.MeshLambertMaterial({ color: 0x9bc53d }), 2.1, 0.11, 0.7);
+  cyl(0.08, 0.7, mat.black, 5.0, 0.08, 0.6, 'x');
+  var yel = new THREE.MeshLambertMaterial({ color: 0xf2c200 });
+  cyl(0.13, 0.28, yel, 6.0, 0.14, 0.55);
+  cyl(0.13, 0.28, yel, 6.25, 0.14, 0.85);
+  [0xe5392f, 0x2d7fe0, 0x3bb54a, 0xf0c30f, 0x9b2fd1].forEach(function (c, i) {
+    var t = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.013, 6, 28), new THREE.MeshLambertMaterial({ color: c }));
+    t.rotation.x = PI / 2; t.position.set(5.3 + i * 0.07, 0.02 + i * 0.026, 0.85 + i * 0.04); add(t);
+  });
+  cyl(0.17, 0.26, mat.black, 1.1, 0.99, W - 0.22);
+  var leaf = new THREE.MeshLambertMaterial({ color: 0x3f7a3a });
+  for (var q = 0; q < 5; q++) {
+    var cone = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.4, 5), leaf);
+    cone.position.set(1.1 + Math.sin(q * 1.3) * 0.08, 1.3, W - 0.22 + Math.cos(q * 1.3) * 0.08);
+    cone.rotation.set(Math.cos(q * 1.3) * 0.4, 0, -Math.sin(q * 1.3) * 0.4); add(cone);
+  }
+
+  /* ---------- vedlejší místnost (ordinace) 6 × 3,5 m ---------- */
+  function terrazzoTex() {
+    return cv(256, 256, function (g, w, h) {
+      g.fillStyle = '#dcd8cc'; g.fillRect(0, 0, w, h);
+      var r = seeded(23);
+      for (var i = 0; i < 420; i++) {
+        var d = r();
+        g.fillStyle = d < 0.5 ? 'rgba(40,40,40,.55)' : (d < 0.8 ? 'rgba(150,140,125,.5)' : 'rgba(255,255,255,.6)');
+        g.beginPath(); g.arc(r() * w, r() * h, 0.8 + r() * 2.2, 0, 2 * PI); g.fill();
+      }
+      g.fillStyle = 'rgba(120,115,105,.45)'; g.fillRect(0, 0, w, 1.5); g.fillRect(0, 0, 1.5, h);
+    }, [D / 1.2, W / 1.2]);
+  }
+  function slatTexV(wm) {
+    return cv(64, 32, function (g, w, h) {
+      g.fillStyle = '#241e1a'; g.fillRect(0, 0, w, h);
+      var gr = g.createLinearGradient(14, 0, w, 0);
+      gr.addColorStop(0, '#d2ab7c'); gr.addColorStop(1, '#b98c5c');
+      g.fillStyle = gr; g.fillRect(14, 0, w - 14, h);
+    }, [wm / 0.09, 1]);
+  }
+  function posterTex() {
+    return cv(64, 96, function (g, w, h) {
+      g.fillStyle = '#f6f3ea'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#b5493a';
+      [[18, 50], [46, 50]].forEach(function (p) {
+        g.beginPath(); g.arc(p[0], p[1] - 28, 5, 0, 2 * PI); g.fill();
+        g.fillRect(p[0] - 6, p[1] - 22, 12, 30);
+        g.fillRect(p[0] - 5, p[1] + 8, 4, 24); g.fillRect(p[0] + 1, p[1] + 8, 4, 24);
+      });
+      g.fillStyle = '#2b2b2b'; g.fillRect(0, 0, w, 6);
+    });
+  }
+  function lam(c) { return new THREE.MeshLambertMaterial({ color: c }); }
+
+  var roomWall = lam(0xf4f2ec);
+  var terrazzo = new THREE.MeshStandardMaterial({ map: terrazzoTex(), roughness: 0.55, metalness: 0 });
+  addLight(L + 1.8, H - 0.5, W / 2, 0.5, 7, 'room', 'ceil');
+  addLight(LT - 0.7, 2.4, 1.5, 1, 6, 'room', 'win');
+  addLight(LT - 0.7, 2.4, 4.5, 1, 6, 'room', 'win');
+  addLight(L + 1.7, 2.4, W - 0.7, 1, 6, 'room', 'win');
+  addLight(L + 1.75, 1.7, W / 2, 1, 6.5, 'room', 'fill');
+
+  /* podlaha, strop, svítidlo */
+  plane(D, W, terrazzo, L + D / 2, 0, W / 2, -PI / 2, 0);
+  plane(D, W, mat.ceil, L + D / 2, H, W / 2, PI / 2, 0);
+  plane(0.7, 0.5, mat.lamp, L + 1.6, H - 0.003, 3.0, PI / 2, 0);
+
+  /* stěna ke sálu, strana místnosti, s otvorem pro dveře */
+  var zl = DZ - 0.46, zr = DZ + 0.46;
+  plane(zl, H, roomWall, L + 0.002, H / 2, zl / 2, 0, PI / 2);
+  plane(W - zr, H, roomWall, L + 0.002, H / 2, zr + (W - zr) / 2, 0, PI / 2);
+  plane(0.92, H - 2.2, roomWall, L + 0.002, 2.2 + (H - 2.2) / 2, DZ, 0, PI / 2);
+  box(0.12, 2.2, 0.07, mat.frame, L + 0.06, 1.1, DZ - 0.495);
+  box(0.12, 2.2, 0.07, mat.frame, L + 0.06, 1.1, DZ + 0.495);
+  box(0.12, 0.07, 1.06, mat.frame, L + 0.06, 2.165, DZ);
+
+  /* ostatní stěny */
+  plane(D, H, roomWall, L + D / 2, H / 2, 0, 0, 0);
+  plane(D, H, roomWall, L + D / 2, H / 2, W, 0, PI);
+  plane(W, H, roomWall, L + D, H / 2, W / 2, 0, -PI / 2);
+
+  /* okna na dlouhé stěně u vnější strany */
+  var segs2 = 4, seg2 = (W - 0.4) / segs2;
+  for (var q2 = 0; q2 < segs2; q2++) {
+    plane(seg2 - 0.1, 2.7, blind, L + D - 0.04, 2.3, 0.2 + seg2 * (q2 + 0.5), 0, -PI / 2);
+    box(0.1, 2.7, 0.1, mat.frame, L + D - 0.06, 2.3, 0.2 + seg2 * q2);
+  }
+  box(0.1, 2.7, 0.1, mat.frame, L + D - 0.06, 2.3, W - 0.2);
+  box(0.1, 0.06, W - 0.4, mat.frame, L + D - 0.06, 0.95, W / 2);
+  box(0.1, 0.06, W - 0.4, mat.frame, L + D - 0.06, 3.65, W / 2);
+  box(0.42, 0.9, W, mat.frame, L + D - 0.21, 0.45, W / 2);
+  plane(W - 0.1, 0.84, new THREE.MeshLambertMaterial({ map: slatTexV(W) }), L + D - 0.422, 0.45, W / 2, 0, -PI / 2);
+  var curtain2 = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.4, 2.8),
+    new THREE.MeshLambertMaterial({ map: curtainTex(), transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+  curtain2.position.set(L + D - 0.3, 2.35, W / 2); curtain2.rotation.y = -PI / 2; add(curtain2);
+
+  /* okno na kratší stěně u rohu */
+  var blind2 = new THREE.MeshBasicMaterial({ map: blindTex(2.6) });
+  glassMats.push(blind2);
+  plane(2.8, 2.6, blind2, L + 1.7, 2.3, W - 0.04, 0, PI);
+  [0.3, 1.7, 3.1].forEach(function (dx) { box(0.1, 2.6, 0.1, mat.frame, L + dx, 2.3, W - 0.06); });
+  box(2.9, 0.06, 0.1, mat.frame, L + 1.7, 0.98, W - 0.06);
+  box(2.9, 0.06, 0.1, mat.frame, L + 1.7, 3.62, W - 0.06);
+  box(D - 0.4, 0.9, 0.42, mat.frame, L + (D - 0.4) / 2, 0.45, W - 0.21);
+  plane(D - 0.5, 0.84, new THREE.MeshLambertMaterial({ map: slatTexV(D - 0.5) }), L + (D - 0.4) / 2, 0.45, W - 0.422, 0, PI);
+  var curtain3 = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2.7),
+    new THREE.MeshLambertMaterial({ map: curtainTex(), transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+  curtain3.position.set(L + 1.7, 2.35, W - 0.3); add(curtain3);
+
+  /* lišty u podlahy v ordinaci */
+  var skirt = lam(0xc4c7c8);
+  box(D, 0.08, 0.02, skirt, L + D / 2, 0.04, 0.01);
+  box(0.02, 0.08, zl, skirt, L + 0.01, 0.04, zl / 2);
+  box(0.02, 0.08, W - zr, skirt, L + 0.01, 0.04, zr + (W - zr) / 2);
+
+  /* plakáty a gumy na stěně ke sálu */
+  var posterMat = new THREE.MeshLambertMaterial({ map: posterTex() });
+  [2.5, 3.3, 4.1, 4.95].forEach(function (pz) { plane(0.55, 0.85, posterMat, L + 0.012, 1.75, pz, 0, PI / 2); });
+  [0xf08a24, 0xf2c31b, 0x1f9d8f, 0x2d5fa8].forEach(function (c, i) { box(0.02, 0.7, 0.04, lam(c), L + 0.03, 1.4, 5.5 + i * 0.07); });
+
+  /* stěna s hodinami: panel s háčky, hodiny, stůl */
+  box(0.5, 1.1, 0.02, new THREE.MeshLambertMaterial({ map: slatTexV(0.5) }), L + 0.3, 1.7, 0.02);
+  box(0.5, 0.05, 0.04, mat.black, L + 0.3, 2.22, 0.04);
+  var clock2 = new THREE.Mesh(new THREE.CircleGeometry(0.15, 28), new THREE.MeshLambertMaterial({ color: 0x24262a }));
+  clock2.position.set(L + 1.7, 2.3, 0.012); add(clock2);
+  box(1.4, 0.04, 0.6, lam(0x6d7075), L + 1.7, 0.75, 0.32);
+  box(0.04, 0.73, 0.04, mat.black, L + 1.05, 0.37, 0.05);
+  box(0.04, 0.73, 0.04, mat.black, L + 1.05, 0.37, 0.58);
+  box(0.4, 0.73, 0.55, lam(0x3a3d41), L + 2.2, 0.37, 0.32);
+  box(0.34, 0.03, 0.34, lam(0x2c5fb0), L + 0.75, 0.45, 0.45);
+  box(0.34, 0.45, 0.04, lam(0x2c5fb0), L + 0.75, 0.7, 0.28);
+  box(0.28, 0.3, 0.25, mat.black, L + 0.95, 0.15, 0.3);
+  box(0.28, 0.3, 0.25, mat.black, L + 1.3, 0.15, 0.3);
+  box(0.45, 0.3, 0.35, lam(0xb08a5a), L + 0.35, 0.15, 1.75);
+  var bag = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), lam(0x2d2f33));
+  bag.position.set(L + 0.3, 0.17, 1.4); bag.scale.set(1, 0.9, 1); add(bag);
+
+  /* masážní lehátko */
+  var tableMat = lam(0x2b4260);
+  box(0.7, 0.1, 1.9, tableMat, L + 1.5, 0.7, 3.1);
+  box(0.12, 0.45, 0.12, mat.black, L + 1.5, 0.43, 3.1);
+  box(0.6, 0.06, 0.1, mat.black, L + 1.5, 0.08, 2.5);
+  box(0.6, 0.06, 0.1, mat.black, L + 1.5, 0.08, 3.7);
+  var hole = new THREE.Mesh(new THREE.CircleGeometry(0.08, 18), lam(0x10151c));
+  hole.rotation.x = -PI / 2; hole.position.set(L + 1.5, 0.752, 2.3); add(hole);
+
+  /* židle na kolečkách */
+  cyl(0.27, 0.05, mat.black, L + 2.6, 0.1, 1.9);
+  cyl(0.03, 0.35, mat.black, L + 2.6, 0.3, 1.9);
+  cyl(0.23, 0.07, mat.black, L + 2.6, 0.52, 1.9);
+  var back = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.34, 16, 1, true, PI * 0.5, PI),
+    new THREE.MeshLambertMaterial({ color: 0x1e2023, side: THREE.DoubleSide }));
+  back.position.set(L + 2.6, 0.8, 1.9); back.rotation.y = -PI / 2; add(back);
+
+  /* podložka, míč, stolička, role */
+  plane(1.8, 1.6, lam(0x222426), L + 2.6, 0.006, 5.2, -PI / 2, 0);
+  var ball = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), lam(0x1d7a8c));
+  ball.position.set(L + 0.55, 0.3, 5.4); add(ball);
+  cyl(0.1, 0.6, lam(0x26364f), L + 0.35, 0.3, 4.85);
+  cyl(0.08, 0.3, mat.black, L + 0.5, 0.15, 4.55);
+  cyl(0.17, 0.03, lam(0x2fa4d6), L + 0.75, 0.45, 4.2);
+  [[-0.12, -0.1], [0.12, -0.1], [0, 0.13]].forEach(function (p) { cyl(0.012, 0.45, lam(0x2fa4d6), L + 0.75 + p[0], 0.22, 4.2 + p[1]); });
+  cyl(0.06, 0.6, mat.frame, L + 3.0, 0.3, 4.2);
+
+  /* parapet u oken: věci na radiátorovém krytu (dlouhá okenní stěna) */
+  var sx = L + D - 0.2;
+  box(0.3, 0.03, 0.5, mat.black, sx, 0.915, 0.7);
+  cyl(0.07, 0.2, new THREE.MeshLambertMaterial({ color: 0xcfe3ea, transparent: true, opacity: 0.7 }), sx, 1.03, 0.6);
+  box(0.12, 0.08, 0.25, lam(0x2a6fd0), sx, 0.95, 1.0);
+  [0, 1, 2, 3].forEach(function (m) { box(0.08, 0.1, 0.06, lam(m % 2 ? 0xd8453a : 0xf4f4f0), sx, 0.97, 1.3 + m * 0.09); });
+  box(0.22, 0.3, 0.2, mat.frame, sx, 1.05, 1.95);
+  cyl(0.035, 0.26, lam(0xb7d7e0), sx, 1.03, 2.25);
+  box(0.2, 0.14, 0.28, lam(0x2d2f33), sx, 0.97, 2.55);
+  cyl(0.1, 0.14, mat.frame, sx, 0.97, 3.1);
+  [0, 1, 2, 3, 4].forEach(function (m) {
+    var lf = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), lam(0x3f7a3a));
+    lf.position.set(sx + Math.sin(m * 1.3) * 0.08, 1.1 + (m % 2) * 0.05, 3.1 + Math.cos(m * 1.3) * 0.08); add(lf);
+  });
+  box(0.12, 0.08, 0.25, lam(0x2a6fd0), sx, 0.95, 3.7);
+  var cactusPot = cyl(0.09, 0.14, mat.black, L + D - 0.35, 0.97, W - 0.3);
+  [-0.04, 0, 0.04].forEach(function (cx) { cyl(0.025, 0.7 + cx * 3, lam(0x3a7a4a), L + D - 0.35 + cx, 1.35, W - 0.3); });
+
+  /* parapet u okna na kratší stěně */
+  box(0.3, 0.14, 0.22, mat.black, L + 0.8, 0.97, W - 0.2);
+  box(0.3, 0.14, 0.22, mat.black, L + 2.8, 0.97, W - 0.2);
+  var rball = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), lam(0xd8453a));
+  rball.position.set(L + 2.8, 1.09, W - 0.2); add(rball);
+  box(0.22, 0.08, 0.14, lam(0x3a47a8), L + 2.4, 0.95, W - 0.2);
+  cyl(0.1, 0.04, mat.black, L + 1.7, 0.92, W - 0.2);
+  cyl(0.02, 0.28, mat.black, L + 1.7, 1.05, W - 0.2);
+  cyl(0.15, 0.03, mat.black, L + 1.7, 1.28, W - 0.22, 'z');
+
+  /* teplé sluneční paprsky a skvrny v ordinaci */
+  var roomShaftMat = new THREE.MeshBasicMaterial({ map: shaftMat.map, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, color: 0xffc070 });
+  var roomPatchMat = new THREE.MeshBasicMaterial({ map: patchMat.map, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, color: 0xffc070 });
+  var roomShafts = new THREE.Group(); roomShafts.visible = false; scene.add(roomShafts);
+  function addBeam(group, bFrom, bTo, bw) {
+    var up = new THREE.Vector3().subVectors(bFrom, bTo), len = up.length(); up.normalize();
+    var q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+    var mid = bFrom.clone().add(bTo).multiplyScalar(0.5);
+    [0, 1].forEach(function (j) {
+      var bm = new THREE.Mesh(new THREE.PlaneGeometry(bw, len), roomShaftMat);
+      bm.position.copy(mid); bm.quaternion.copy(q); if (j) bm.quaternion.multiply(qy);
+      group.add(bm);
+    });
+    var pm = new THREE.Mesh(new THREE.PlaneGeometry(bw * 0.9, 1.5), roomPatchMat);
+    pm.rotation.x = -PI / 2; pm.position.set(bTo.x, 0.015, bTo.z); group.add(pm);
+  }
+  for (var rb = 0; rb < segs2; rb++) {
+    var rz = 0.2 + seg2 * (rb + 0.5);
+    addBeam(roomShafts, new THREE.Vector3(L + D - 0.1, 3.3, rz), new THREE.Vector3(L + D - 2.3, 0.02, rz + 0.9), seg2 * 0.8);
+  }
+  addBeam(roomShafts, new THREE.Vector3(L + 1.7, 3.2, W - 0.1), new THREE.Vector3(L + 2.4, 0.02, W - 2.1), 1.8);
+
+  /* ---------- stav kamery ---------- */
+  var mode = 'walk';
+  var cam = { h: 1.6, roll: 0, f: 35, ar: '16:9' };
+  var AR = { free: 0, '16:9': 16 / 9, '2.39:1': 2.39, '3:2': 1.5, '4:3': 4 / 3, '1:1': 1, '4:5': 0.8, '9:16': 9 / 16 };
+  var s = { x: 1.2, z: 3.0, yaw: -PI / 2, pitch: 0 };
+  var o = { az: 0, pol: 0.55, dist: 24, touched: false };
+  var T = new THREE.Vector3(LT / 2, 0, W / 2);
+  function inRect(x, z, x0, x1, z0, z1) { return x >= x0 && x <= x1 && z >= z0 && z <= z1; }
+  function walkable(x, z) {
+    return inRect(x, z, 0.4, L - 0.5, 0.6, W - 0.7) ||
+           inRect(x, z, L + 0.4, LT - 0.5, 0.5, W - 0.5) ||
+           inRect(x, z, L - 0.6, L + 0.6, DZ - 0.33, DZ + 0.33);
+  }
+  var fovWalk = 70;
+  var anim = null;
+
+  var VIEWS = [
+    { name: 'Podél sálu', x: 1.2, z: 3.0, yaw: -PI / 2, pitch: 0 },
+    { name: 'Zpět podél sálu', x: 16.8, z: 3.0, yaw: PI / 2, pitch: 0 },
+    { name: 'K zrcadlům', x: 9.0, z: 4.6, yaw: 0, pitch: -0.05 },
+    { name: 'K oknům', x: 9.0, z: 1.6, yaw: PI, pitch: 0.03 },
+    { name: 'Střed sálu', x: 9.0, z: 3.0, yaw: -PI / 2, pitch: 0.05 },
+    { name: 'Vedlejší místnost', x: L + 0.6, z: DZ, yaw: -PI / 2, pitch: 0 },
+    { name: 'Od oken místnosti', x: LT - 0.7, z: 1.0, yaw: PI / 2 + 0.25, pitch: 0 }
+  ];
+
+  var viewsEl = document.getElementById('views');
+  VIEWS.forEach(function (v, i) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = v.name; b.dataset.i = i;
+    viewsEl.appendChild(b);
+  });
+  var activeView = 0;
+  function markView(i) {
+    activeView = i;
+    Array.prototype.forEach.call(viewsEl.children, function (b, k) { b.classList.toggle('on', k === i); });
+  }
+  markView(0);
+
+  function easeIO(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+  function goTo(i) {
+    var v = VIEWS[i]; markView(i);
+    if (mode === 'top') { setMode('walk'); s.x = v.x; s.z = v.z; s.yaw = v.yaw; s.pitch = v.pitch; return; }
+    if ((s.x < L) !== (v.x < L)) { s.x = v.x; s.z = v.z; s.yaw = v.yaw; s.pitch = v.pitch; return; }
+    var d = ((v.yaw - s.yaw + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI;
+    anim = { t0: performance.now(), dur: 750, from: { x: s.x, z: s.z, yaw: s.yaw, pitch: s.pitch }, to: { x: v.x, z: v.z, yaw: s.yaw + d, pitch: v.pitch } };
+  }
+  viewsEl.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) goTo(+b.dataset.i); });
+
+  function fitDist() {
+    var a = camera.aspect || 1;
+    var hf = 2 * Math.atan(Math.tan((45 * PI / 180) / 2) * a);
+    return Math.min(60, Math.max(13, (LT / 2 + 1.2) / Math.tan(hf / 2)));
+  }
+
+  var hintEl = document.getElementById('hint');
+  var padEl = document.getElementById('pad');
+  var modeBtns = document.querySelectorAll('[data-mode]');
+  function setMode(m) {
+    mode = m; anim = null;
+    Array.prototype.forEach.call(modeBtns, function (b) { b.classList.toggle('on', b.dataset.mode === m); });
+    padEl.hidden = m === 'top';
+    lightEl.hidden = m === 'top';
+    camP.hidden = m !== 'cam';
+    if (m === 'walk') {
+      hintEl.textContent = 'Táhni pro rozhlížení · WASD nebo šipky pro pohyb · kolečko mění zorný úhel';
+    } else if (m === 'cam') {
+      hintEl.textContent = 'Táhni pro rozhlížení · WASD pohyb · R/F výška · kolečko mění ohnisko 12–125 mm';
+    } else {
+      if (!o.touched) o.dist = fitDist();
+      hintEl.textContent = 'Táhni pro otáčení · kolečko nebo štípnutí pro přiblížení';
+      markView(-1);
+    }
+    applyFrame(); camKey = ''; if (m === 'cam') syncCam(); mapDirty = true;
+  }
+  Array.prototype.forEach.call(modeBtns, function (b) { b.addEventListener('click', function () { setMode(b.dataset.mode); }); });
+
+  /* ---------- kamera (ohnisko, výška, sklon, roll, poměr stran) ---------- */
+  var $ = function (id) { return document.getElementById(id); };
+  var appEl = $('app'), tintEl = $('tint'), camP = $('camP'), figP = $('figP'), camKey = '';
+  function updateFov() {
+    var a = camera.aspect || 1;
+    if (mode === 'cam') camera.fov = 2 * Math.atan((a >= 1 ? 36 / a : 36) / (2 * cam.f)) * 180 / PI;
+    else camera.fov = mode === 'walk' ? fovWalk : 45;
+    camera.updateProjectionMatrix();
+  }
+  function applyFrame() {
+    var a = mode === 'cam' ? AR[cam.ar] : 0, W0 = appEl.clientWidth, H0 = appEl.clientHeight, w = W0, h = H0;
+    if (a) { if (W0 / H0 > a) w = H0 * a; else h = W0 / a; }
+    [canvas, $('vig'), tintEl].forEach(function (e) { e.style.width = w + 'px'; e.style.height = h + 'px'; e.style.left = (W0 - w) / 2 + 'px'; e.style.top = (H0 - h) / 2 + 'px'; });
+    resize();
+  }
+  var iA = $('iA'), fCh = $('fChips');
+  Object.keys(AR).forEach(function (k) { var op = document.createElement('option'); op.value = k; op.textContent = k === 'free' ? 'Celá obrazovka' : k; iA.appendChild(op); });
+  [12, 16, 24, 35, 50, 85, 125].forEach(function (v) { var b = document.createElement('button'); b.type = 'button'; b.textContent = v; b.dataset.f = v; fCh.appendChild(b); });
+  fCh.onclick = function (e) { var b = e.target.closest('button'); if (b) { cam.f = +b.dataset.f; updateFov(); } };
+  $('iF').oninput = function () { cam.f = +this.value; updateFov(); };
+  $('iH').oninput = function () { cam.h = +this.value; };
+  $('iP').oninput = function () { s.pitch = this.value * PI / 180; };
+  $('iR').oninput = function () { cam.roll = this.value * PI / 180; };
+  $('rRoll').onclick = function () { cam.roll = 0; };
+  iA.onchange = function () { cam.ar = this.value; applyFrame(); };
+  function syncCam() {
+    var k = [cam.f, cam.h.toFixed(2), s.pitch.toFixed(3), cam.roll.toFixed(3), cam.ar, camera.fov.toFixed(1)].join();
+    if (k === camKey) return; camKey = k;
+    var pd = Math.round(s.pitch * 180 / PI), rd = Math.round(cam.roll * 180 / PI), hf = 2 * Math.atan(Math.tan(camera.fov * PI / 360) * camera.aspect) * 180 / PI;
+    [['iF', cam.f], ['iH', cam.h], ['iP', pd], ['iR', rd]].forEach(function (q) { if (document.activeElement !== $(q[0])) $(q[0]).value = q[1]; });
+    $('vF').textContent = Math.round(cam.f) + ' mm'; $('vH').textContent = cam.h.toFixed(2) + ' m';
+    $('vP').textContent = pd + '°'; $('vR').textContent = rd + '°';
+    $('camInfo').textContent = 'Zorný úhel ' + Math.round(hf) + '° × ' + Math.round(camera.fov) + '°';
+    iA.value = cam.ar;
+    Array.prototype.forEach.call(fCh.children, function (b) { b.classList.toggle('on', +b.dataset.f === Math.round(cam.f)); });
+  }
+
+  /* ---------- další postavy: póza, otočení, přetahování po podlaze ---------- */
+  function mir(a) { return [-a[0], a[1], a[2]]; }
+  function P(c, l, r, prop) {
+    r = r || l.map(mir);
+    return { prop: prop || '', j: { h: c[0], n: c[1], p: c[2], sl: l[0], el: l[1], dl: l[2], hl: l[3], kl: l[4], fl: l[5], sr: r[0], er: r[1], dr: r[2], hr: r[3], kr: r[4], fr: r[5] } };
+  }
+  var C0 = [[0, 1.62, 0], [0, 1.46, 0], [0, 0.92, 0]];
+  var POSES = {
+    stand: P(C0, [[-.2, 1.46, 0], [-.23, 1.17, .02], [-.23, .88, .04], [-.09, .92, 0], [-.1, .46, .01], [-.1, 0, .03]]),
+    walk: P([[0, 1.62, .04], [0, 1.46, .03], [0, .92, 0]], [[-.2, 1.46, 0], [-.22, 1.2, .12], [-.2, .95, .3], [-.09, .92, 0], [-.09, .52, .25], [-.09, .05, .42]],
+      [[.2, 1.46, 0], [.22, 1.2, -.12], [.2, .97, -.28], [.09, .92, 0], [.09, .5, -.15], [.09, .06, -.4]]),
+    floor: P([[0, .78, .16], [0, .62, .1], [0, .1, 0]], [[-.2, .62, .1], [-.24, .38, .28], [-.13, .5, .4], [-.09, .1, 0], [-.12, .45, .35], [-.12, 0, .55]]),
+    lean: P([[0, 1.62, -.05], [0, 1.46, -.04], [0, .92, -.02]], [[-.2, 1.46, -.03], [-.22, 1.2, -.02], [-.15, .93, .04], [-.09, .92, -.02], [-.1, .46, .1], [-.1, 0, .2]],
+      [[.2, 1.46, -.03], [.24, 1.22, .12], [-.04, 1.28, .2], [.09, .92, -.02], [.1, .46, .04], [.02, 0, .26]]),
+    crouch: P([[0, 1.07, .16], [0, .92, .1], [0, .42, -.08]], [[-.2, .92, .1], [-.22, .7, .28], [-.17, .6, .4], [-.1, .42, -.08], [-.16, .52, .32], [-.14, 0, .18]]),
+    lie: P([[0, .1, .72], [0, .06, .54], [0, .06, 0]], [[-.2, .06, .54], [-.25, .06, .24], [-.25, .06, -.06], [-.09, .05, 0], [-.1, .05, -.46], [-.1, .03, -.92]],
+      [[.2, .06, .54], [.25, .06, .24], [.25, .06, -.06], [.09, .05, 0], [.1, .3, -.38], [.1, .03, -.72]]),
+    dance: P(C0, [[-.2, 1.46, 0], [-.36, 1.7, 0], [-.5, 1.98, .02], [-.09, .92, 0], [-.1, .46, 0], [-.1, 0, 0]],
+      [[.2, 1.46, 0], [.34, 1.42, .2], [.5, 1.5, .45], [.09, .92, 0], [.12, .62, .3], [.12, .2, .1]])
+  };
+  var SIT = [[[0, 1.2, .04], [0, 1.04, .02], [0, .5, 0]], [[-.2, 1.04, 0], [-.22, .8, .2], [-.14, .58, .38], [-.09, .5, 0], [-.1, .48, .46], [-.1, .02, .5]]];
+  POSES.bench = P(SIT[0], SIT[1], null, 'bench');
+  POSES.chair = P(SIT[0], SIT[1], null, 'chair');
+  var PN = [['stand', 'Stojí'], ['walk', 'Jde'], ['bench', 'Sedí na lavici'], ['chair', 'Sedí na židli'], ['floor', 'Sedí na zemi'], ['lean', 'Opírá se o stěnu'], ['crouch', 'Dřep'], ['lie', 'Leží'], ['dance', 'Tančí']];
+  var PNAME = {}; PN.forEach(function (q) { PNAME[q[0]] = q[1]; });
+  var BONES = [['n', 'p'], ['sl', 'sr'], ['hl', 'hr'], ['sl', 'el'], ['el', 'dl'], ['sr', 'er'], ['er', 'dr'], ['hl', 'kl'], ['kl', 'fl'], ['hr', 'kr'], ['kr', 'fr']];
+  var boneGeo = new THREE.CylinderGeometry(0.024, 0.024, 1, 8), headGeo = new THREE.SphereGeometry(0.11, 14, 10);
+  var hitMat = new THREE.MeshBasicMaterial({ visible: false });
+  var figs = [], figSel = null, defPose = 'stand', drag = null, UP = new THREE.Vector3(0, 1, 0), va = new THREE.Vector3(), vb = new THREE.Vector3();
+
+  function buildProp(g, kind) {
+    function pb(w, h, d, x, y, z) { var m2 = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat.wood); m2.position.set(x, y, z); g.add(m2); }
+    if (kind === 'bench') { pb(1.3, .05, .36, 0, .44, .02); pb(.05, .42, .3, -.55, .21, .02); pb(.05, .42, .3, .55, .21, .02); }
+    else {
+      pb(.42, .04, .42, 0, .43, 0); pb(.42, .4, .03, 0, .68, -.2);
+      [[-.18, -.18], [-.18, .18], [.18, -.18], [.18, .18]].forEach(function (q) { pb(.03, .42, .03, q[0], .21, q[1]); });
+    }
+  }
+  /* opření o stěnu: nejbližší stěna sálu nebo ordinace, záda ke zdi (s odstupem od tyčí a radiátorů) */
+  function snapWall(f) {
+    var p = f.g.position, room = p.x > L, x0 = room ? L : 0, x1 = room ? LT : L;
+    var c = [[p.z, [0, 1], room ? .2 : .5, 'z', 0], [W - p.z, [0, -1], .55, 'z', W], [p.x - x0, [1, 0], room ? .2 : .5, 'x', x0], [x1 - p.x, [-1, 0], room ? .55 : .2, 'x', x1]]
+      .sort(function (a, b) { return a[0] - b[0]; })[0], n = c[1];
+    if (c[3] === 'z') p.z = c[4] + n[1] * c[2]; else p.x = c[4] + n[0] * c[2];
+    p.x = Math.max(x0 + .5, Math.min(x1 - .5, p.x)); p.z = Math.max(.5, Math.min(W - .5, p.z));
+    f.yaw = Math.atan2(n[0], n[1]); f.g.rotation.y = f.yaw; uiFig();
+  }
+  function setPose(f, name) {
+    var d = POSES[name], j = d.j, mn = [9, 9, 9], mx = [-9, -9, -9];
+    f.pose = name;
+    BONES.forEach(function (b, i) {
+      va.fromArray(j[b[0]]); vb.fromArray(j[b[1]]);
+      var mm = f.bones[i], len = va.distanceTo(vb) || 0.001;
+      mm.position.copy(va).add(vb).multiplyScalar(0.5); mm.scale.set(1, len, 1);
+      mm.quaternion.setFromUnitVectors(UP, vb.sub(va).normalize());
+    });
+    f.head.position.fromArray(j.h);
+    Object.keys(j).forEach(function (k) { j[k].forEach(function (v, i) { mn[i] = Math.min(mn[i], v); mx[i] = Math.max(mx[i], v); }); });
+    f.hit.position.set((mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2);
+    f.hit.scale.set(mx[0] - mn[0] + .3, mx[1] - mn[1] + .3, mx[2] - mn[2] + .3);
+    f.pg.children.slice().forEach(function (c) { f.pg.remove(c); });
+    if (d.prop) buildProp(f.pg, d.prop);
+    if (name === 'lean') snapWall(f);
+    uiFig();
+  }
+  function mkFig(x, z, yaw, pose) {
+    var g = new THREE.Group(), fm = lam(0x3a3f46), f = { g: g, mat: fm, bones: [], pg: new THREE.Group(), yaw: yaw };
+    BONES.forEach(function () { var mm = new THREE.Mesh(boneGeo, fm); g.add(mm); f.bones.push(mm); });
+    f.head = new THREE.Mesh(headGeo, fm); f.hit = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), hitMat);
+    g.add(f.head, f.hit, f.pg); g.position.set(x, 0, z); g.rotation.y = yaw; scene.add(g);
+    figs.push(f); setPose(f, pose); return f;
+  }
+  function addFig() {
+    var x, z, yaw;
+    if (mode === 'top') { x = L / 2 + (Math.random() - .5) * 6; z = W / 2 + (Math.random() - .5) * 2; yaw = Math.random() * 2 * PI; }
+    else {
+      var fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw), sh = (figs.length % 3 - 1) * .6;
+      x = s.x + fx * 2.2 + Math.cos(s.yaw) * sh; z = s.z + fz * 2.2 - Math.sin(s.yaw) * sh; yaw = Math.atan2(-fx, -fz);
+    }
+    x = Math.max(.4, Math.min(LT - .4, x)); z = Math.max(.4, Math.min(W - .4, z));
+    selectFig(mkFig(x, z, yaw, defPose));
+  }
+  function selectFig(f) { figSel = f; if (f) defPose = f.pose; uiFig(); }
+  var poseCh = $('poseChips'), listEl = $('figList');
+  PN.forEach(function (q) { var b = document.createElement('button'); b.type = 'button'; b.textContent = q[1]; b.dataset.p = q[0]; poseCh.appendChild(b); });
+  function uiFig() {
+    figs.forEach(function (f) { f.mat.color.setHex(f === figSel && figP.open ? 0xe0a928 : 0x3a3f46); });
+    Array.prototype.forEach.call(poseCh.children, function (b) { b.classList.toggle('on', b.dataset.p === (figSel ? figSel.pose : defPose)); });
+    listEl.innerHTML = '';
+    figs.forEach(function (f, i) {
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = (i + 1) + ' · ' + PNAME[f.pose]; b.className = f === figSel ? 'on' : '';
+      b.onclick = function () { selectFig(f); }; listEl.appendChild(b);
+    });
+    var iy = $('iY'); iy.disabled = $('fDel').disabled = !figSel;
+    if (figSel) { iy.value = Math.round(((figSel.yaw * 180 / PI) % 360 + 360) % 360); $('vY').textContent = iy.value + '°'; }
+  }
+  poseCh.onclick = function (e) { var b = e.target.closest('button'); if (!b) return; defPose = b.dataset.p; if (figSel) setPose(figSel, defPose); else uiFig(); };
+  $('fAdd').onclick = addFig;
+  $('iY').oninput = function () { if (!figSel) return; figSel.yaw = this.value * PI / 180; figSel.g.rotation.y = figSel.yaw; $('vY').textContent = this.value + '°'; };
+  $('fDel').onclick = function () { if (!figSel) return; scene.remove(figSel.g); figs.splice(figs.indexOf(figSel), 1); selectFig(figs[figs.length - 1] || null); };
+  $('fClr').onclick = function () { figs.forEach(function (f) { scene.remove(f.g); }); figs = []; selectFig(null); };
+  figP.addEventListener('toggle', uiFig);
+  if (window.innerWidth < 700) figP.open = camP.open = false;
+  uiFig();
+
+  var rc = new THREE.Raycaster(), ndc = new THREE.Vector2(), flPl = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hv = new THREE.Vector3();
+  function ray(e) {
+    var r = canvas.getBoundingClientRect();
+    ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    camera.updateMatrixWorld(); rc.setFromCamera(ndc, camera);
+  }
+  function pickFig(e) {
+    ray(e); var h = rc.intersectObjects(figs.map(function (f) { return f.hit; }), false)[0];
+    return h ? figs.filter(function (f) { return f.hit === h.object; })[0] : null;
+  }
+  function dragTo(e) {
+    ray(e); if (!rc.ray.intersectPlane(flPl, hv)) return;
+    drag.g.position.set(Math.max(.3, Math.min(LT - .3, hv.x)), 0, Math.max(.3, Math.min(W - .3, hv.z)));
+  }
+
+  /* ---------- vstupy ---------- */
+  var pointers = new Map(), lastPinch = 0;
+  canvas.addEventListener('pointerdown', function (e) {
+    canvas.setPointerCapture(e.pointerId);
+    var hf = !pointers.size && figP.open ? pickFig(e) : null;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (hf) { drag = hf; selectFig(hf); anim = null; return; }
+    if (pointers.size === 2) { var p = Array.from(pointers.values()); lastPinch = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); }
+    anim = null;
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    var p = pointers.get(e.pointerId); if (!p) return;
+    if (drag) { dragTo(e); return; }
+    var dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (pointers.size === 1) {
+      if (mode !== 'top') {
+        var kf = camera.fov / 70, pm = mode === 'cam' ? 1.48 : 1.2;
+        s.yaw += dx * 0.004 * kf;
+        s.pitch = Math.max(-pm, Math.min(pm, s.pitch + dy * 0.004 * kf));
+      } else {
+        o.touched = true;
+        o.az -= dx * 0.006;
+        o.pol = Math.max(0.12, Math.min(1.35, o.pol - dy * 0.006));
+      }
+    } else if (pointers.size === 2) {
+      var q = Array.from(pointers.values());
+      var d = Math.hypot(q[0].x - q[1].x, q[0].y - q[1].y);
+      if (lastPinch) zoom(lastPinch / d);
+      lastPinch = d;
+    }
+  });
+  function endPointer(e) { pointers.delete(e.pointerId); lastPinch = 0; if (drag) { if (drag.pose === 'lean') snapWall(drag); drag = null; } }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  function zoom(k) {
+    if (mode === 'cam') cam.f = Math.max(12, Math.min(125, cam.f / k));
+    else if (mode === 'walk') fovWalk = Math.max(40, Math.min(90, fovWalk * k));
+    else { o.touched = true; o.dist = Math.max(5, Math.min(60, o.dist * k)); }
+    updateFov();
+  }
+  canvas.addEventListener('wheel', function (e) { e.preventDefault(); zoom(e.deltaY > 0 ? 1.08 : 0.92); }, { passive: false });
+
+  var held = {};
+  var KEYMAP = { w: 'f', arrowup: 'f', s: 'b', arrowdown: 'b', a: 'l', d: 'r', arrowleft: 'tl', arrowright: 'tr', q: 'tl', e: 'tr', r: 'up', f: 'dn' };
+  window.addEventListener('keydown', function (e) { var k = KEYMAP[e.key.toLowerCase()]; if (k) { held[k] = true; anim = null; if (e.key.indexOf('Arrow') === 0) e.preventDefault(); } });
+  window.addEventListener('keyup', function (e) { var k = KEYMAP[e.key.toLowerCase()]; if (k) held[k] = false; });
+  window.addEventListener('blur', function () { held = {}; });
+  Array.prototype.forEach.call(padEl.querySelectorAll('button'), function (b) {
+    var dir = b.dataset.dir;
+    b.addEventListener('pointerdown', function (e) { b.setPointerCapture(e.pointerId); held['p' + dir] = true; anim = null; });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (ev) { b.addEventListener(ev, function () { held['p' + dir] = false; }); });
+  });
+
+  /* ---------- světelná atmosféra (jen v procházce; shora zůstává neutrální) ---------- */
+  function C(h) { return new THREE.Color(h); }
+  var NEUT = 0xfff3e0, WARM = 0xffc070, WARMC = 0xffd9a0;
+  var PRESETS = {
+    neutral: { amb: 0.5, hemi: 0.4, hs: C(0xffffff), hg: C(0xb08a5a), fog: 0, fc: C(0xdde1e4), gl: C(0xffffff), vig: 0,
+      hallCeil: 1, roomCeil: 1, roomFill: 0, hallWin: 0, roomWin: 0, hcc: C(NEUT), hwc: C(NEUT), rcc: C(NEUT), rwc: C(NEUT),
+      shaft: 0, patch: 0, sc: C(0xfff1e5), rshaft: 0, rpatch: 0, rsc: C(0xfff1e5) },
+    /* sál: neutrální bílá 5600 K, hlavní světlo z oken; ordinace: teplé zlaté světlo */
+    day: { amb: 0.16, hemi: 0.14, hs: C(0xeef3ff), hg: C(0xc4b9a6), fog: 0.008, fc: C(0xe6e9ec), gl: C(0xffffff), vig: 0.25,
+      hallCeil: 0.2, roomCeil: 0.22, roomFill: 0.16, hallWin: 0.7, roomWin: 0.45, hcc: C(0xfff1e5), hwc: C(0xfff1e5), rcc: C(0xfff1e5), rwc: C(0xfff1e5),
+      shaft: 1, patch: 1, sc: C(0xfff1e5), rshaft: 0.6, rpatch: 0.6, rsc: C(0xfff1e5) },
+    /* teplé světlo 2800 K: svítí hlavně lampy, okna jsou tlumená */
+    warm: { amb: 0.1, hemi: 0.08, hs: C(0x6a5038), hg: C(0x2b1d10), fog: 0.02, fc: C(0x2a1d12), gl: C(0x5a4a3a), vig: 0.45,
+      hallCeil: 1.6, roomCeil: 0.35, roomFill: 0.16, hallWin: 0.35, roomWin: 0.2, hcc: C(0xffa757), hwc: C(0xffb36b), rcc: C(0xffa757), rwc: C(0xffb36b),
+      shaft: 0.7, patch: 0.6, sc: C(0xffbf80), rshaft: 0.5, rpatch: 0.4, rsc: C(0xffbf80) },
+    /* sál: ponuré chladné světlo, pořád z oken; ordinace zůstává teplá */
+    gloom: { amb: 0.085, hemi: 0.08, hs: C(0x9ab4e0), hg: C(0x45516a), fog: 0.02, fc: C(0x6b7d96), gl: C(0xa9bad3), vig: 0.5,
+      hallCeil: 0.16, roomCeil: 0.16, roomFill: 0.12, hallWin: 0.36, roomWin: 0.34, hcc: C(0xc4d8ff), hwc: C(0x9cbcf5), rcc: C(0xc4d8ff), rwc: C(0x9cbcf5),
+      shaft: 0.3, patch: 0.16, sc: C(0xb4ccf8), rshaft: 0.2, rpatch: 0.1, rsc: C(0xb4ccf8) }
+  };
+  ['neutral', 'day', 'warm'].forEach(function (k) { PRESETS[k].con = 1; PRESETS[k].bri = 1; PRESETS[k].tint = 0; });
+  PRESETS.gloom.con = 1.1; PRESETS.gloom.bri = 1.1; PRESETS.gloom.tint = 0.25;
+  var tod = 'day';
+  var cur = {};
+  Object.keys(PRESETS.day).forEach(function (k) { var v = PRESETS.day[k]; cur[k] = v && v.isColor ? v.clone() : v; });
+  scene.fog = new THREE.FogExp2(0xe6e9ec, 0.008);
+  var vigEl = document.getElementById('vig');
+  var lightEl = document.getElementById('light');
+  var lightBtns = lightEl.querySelectorAll('button');
+  Array.prototype.forEach.call(lightBtns, function (b) {
+    b.addEventListener('click', function () {
+      tod = b.dataset.tod;
+      Array.prototype.forEach.call(lightBtns, function (x) { x.classList.toggle('on', x === b); });
+    });
+  });
+  var NUMS = ['amb', 'hemi', 'fog', 'vig', 'hallCeil', 'roomCeil', 'roomFill', 'hallWin', 'roomWin', 'shaft', 'patch', 'rshaft', 'rpatch', 'con', 'bri', 'tint'];
+  var COLS = ['hs', 'hg', 'fc', 'gl', 'hcc', 'hwc', 'rcc', 'rwc', 'sc', 'rsc'];
+  function atmo(dt) {
+    var tg = PRESETS[mode !== 'top' ? tod : 'neutral'], k = Math.min(1, dt * 3);
+    NUMS.forEach(function (n) { cur[n] += (tg[n] - cur[n]) * k; });
+    COLS.forEach(function (n) { cur[n].lerp(tg[n], k); });
+    ambient.intensity = cur.amb;
+    hemi.intensity = cur.hemi; hemi.color.copy(cur.hs); hemi.groundColor.copy(cur.hg);
+    lights.forEach(function (it) {
+      var hall = it.zone === 'hall';
+      if (it.kind === 'ceil') { it.l.intensity = it.base * (hall ? cur.hallCeil : cur.roomCeil); it.l.color.copy(hall ? cur.hcc : cur.rcc); }
+      else if (it.kind === 'fill') { it.l.intensity = it.base * cur.roomFill; it.l.color.copy(cur.rcc); }
+      else { it.l.intensity = it.base * (hall ? cur.hallWin : cur.roomWin); it.l.color.copy(hall ? cur.hwc : cur.rwc); }
+    });
+    scene.fog.density = cur.fog; scene.fog.color.copy(cur.fc);
+    glassMats.forEach(function (m) { m.color.copy(cur.gl); });
+    shaftMat.color.copy(cur.sc); patchMat.color.copy(cur.sc);
+    shaftMat.opacity = cur.shaft * 0.5; patchMat.opacity = cur.patch * 0.4;
+    shaftGroup.visible = cur.shaft > 0.01 || cur.patch > 0.01;
+    roomShaftMat.color.copy(cur.rsc); roomPatchMat.color.copy(cur.rsc);
+    roomShaftMat.opacity = cur.rshaft * 0.45; roomPatchMat.opacity = cur.rpatch * 0.45;
+    roomShafts.visible = cur.rshaft > 0.01 || cur.rpatch > 0.01;
+    vigEl.style.opacity = cur.vig.toFixed(3); tintEl.style.opacity = cur.tint.toFixed(3);
+    canvas.style.filter = (Math.abs(cur.con - 1) > 0.01 || Math.abs(cur.bri - 1) > 0.01) ? 'contrast(' + cur.con.toFixed(3) + ') brightness(' + cur.bri.toFixed(3) + ')' : 'none';
+  }
+
+  /* ---------- minimapa ---------- */
+  var mapEl = document.getElementById('map'), mctx = mapEl.getContext('2d');
+  var mapDirty = true, mapKey = '';
+  function css(name, fb) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fb; }
+  function drawMap(cx, cz, fx, fz, showCam) {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var cw = mapEl.clientWidth, ch = mapEl.clientHeight;
+    if (mapEl.width !== Math.round(cw * dpr)) { mapEl.width = Math.round(cw * dpr); mapEl.height = Math.round(ch * dpr); }
+    mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    mctx.clearRect(0, 0, cw, ch);
+    var pad = 8, sc = (cw - pad * 2) / LT, oy = (ch - W * sc) / 2;
+    function X(x) { return pad + x * sc; } function Z(z) { return oy + z * sc; }
+    mctx.fillStyle = css('--floor-map', '#d9b27a'); mctx.fillRect(X(0), Z(0), L * sc, W * sc);
+    mctx.strokeStyle = css('--muted', '#666'); mctx.lineWidth = 1.5; mctx.strokeRect(X(0), Z(0), L * sc, W * sc);
+    mctx.fillStyle = '#cfcabd'; mctx.fillRect(X(L), Z(0), D * sc, W * sc);
+    mctx.strokeRect(X(L), Z(0), D * sc, W * sc);
+    mctx.fillStyle = '#e8eef0';
+    mctx.fillRect(X(LT) - 3, Z(0.2), 3, (W - 0.4) * sc);
+    mctx.fillRect(X(L + 0.3), Z(W) - 3, 2.8 * sc, 3);
+    mctx.fillStyle = '#7fa3b3';
+    [[0.5, 6.4], [7.6, 10.0], [11.2, 15.6]].forEach(function (m) { mctx.fillRect(X(m[0]), Z(0) - 0.5, (m[1] - m[0]) * sc, 3); });
+    mctx.fillRect(X(0), Z(2.2), 3, 3.3 * sc);
+    mctx.fillStyle = '#e8eef0';
+    mctx.fillRect(X(0.3), Z(W) - 3, (L - 0.6) * sc, 3);
+    mctx.fillStyle = '#e0a928';
+    mctx.fillRect(X(10.1), Z(0) - 1, 1.1 * sc, 4);
+    mctx.fillRect(X(0) - 1, Z(0.8), 4, 1.1 * sc);
+    mctx.fillRect(X(L) - 1, Z(DZ - 0.46), 3, 0.92 * sc);
+    mctx.fillStyle = css('--fg', '#222'); mctx.fillRect(X(6.5), Z(0), 1.0 * sc, 0.38 * sc);
+    if (showCam) {
+      var px = X(cx), pz = Z(cz), a = Math.atan2(fz, fx), acc = css('--accent', '#e0a928');
+      mctx.fillStyle = 'rgba(224,169,40,.35)';
+      mctx.beginPath(); mctx.moveTo(px, pz); mctx.arc(px, pz, 22, a - 0.6, a + 0.6); mctx.closePath(); mctx.fill();
+      mctx.fillStyle = acc; mctx.strokeStyle = css('--fg', '#222'); mctx.lineWidth = 1.5;
+      mctx.beginPath(); mctx.arc(px, pz, 4, 0, 2 * PI); mctx.fill(); mctx.stroke();
+    }
+  }
+
+  /* ---------- smyčka ---------- */
+  function resize() {
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h; updateFov();
+    if (mode === 'top' && !o.touched) o.dist = fitDist();
+    mapDirty = true;
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(canvas); else window.addEventListener('resize', resize);
+
+  var last = performance.now(), dirV = new THREE.Vector3();
+  function frame(now) {
+    var dt = Math.min(0.05, (now - last) / 1000); last = now;
+    var px = s.x, pz = s.z;
+    if (anim) {
+      var t = Math.min(1, (now - anim.t0) / anim.dur), e = easeIO(t);
+      s.x = anim.from.x + (anim.to.x - anim.from.x) * e;
+      s.z = anim.from.z + (anim.to.z - anim.from.z) * e;
+      s.yaw = anim.from.yaw + (anim.to.yaw - anim.from.yaw) * e;
+      s.pitch = anim.from.pitch + (anim.to.pitch - anim.from.pitch) * e;
+      if (t >= 1) anim = null;
+    } else if (mode !== 'top') {
+      var f = (held.f || held.pf ? 1 : 0) - (held.b || held.pb ? 1 : 0);
+      var r = (held.r || held.pr ? 1 : 0) - (held.l || held.pl ? 1 : 0);
+      var turn = (held.tl ? 1 : 0) - (held.tr ? 1 : 0);
+      if (turn) s.yaw += turn * 1.6 * dt;
+      if (f || r) {
+        var sp = 2.6 * dt;
+        s.x += (-Math.sin(s.yaw) * f + Math.cos(s.yaw) * r) * sp;
+        s.z += (-Math.cos(s.yaw) * f - Math.sin(s.yaw) * r) * sp;
+      }
+    }
+    if (mode === 'cam' && (held.up || held.dn)) cam.h = Math.max(0.1, Math.min(3.7, cam.h + ((held.up ? 1 : 0) - (held.dn ? 1 : 0)) * dt * 0.9));
+    if (!walkable(s.x, s.z)) {
+      if (walkable(s.x, pz)) s.z = pz;
+      else if (walkable(px, s.z)) s.x = px;
+      else { s.x = px; s.z = pz; }
+    }
+
+    if (mode !== 'top') {
+      camera.position.set(s.x, mode === 'cam' ? cam.h : EYE, s.z);
+      camera.rotation.set(s.pitch, s.yaw, mode === 'cam' ? cam.roll : 0, 'YXZ');
+    } else {
+      var sp2 = Math.sin(o.pol);
+      camera.position.set(T.x + o.dist * sp2 * Math.sin(o.az), T.y + o.dist * Math.cos(o.pol), T.z + o.dist * sp2 * Math.cos(o.az));
+      camera.lookAt(T);
+    }
+    camera.getWorldDirection(dirV);
+    var key = [camera.position.x.toFixed(2), camera.position.z.toFixed(2), dirV.x.toFixed(2), dirV.z.toFixed(2), mode].join();
+    if (mapDirty || key !== mapKey) { mapKey = key; mapDirty = false; drawMap(camera.position.x, camera.position.z, dirV.x, dirV.z, mode !== 'top'); }
+    var mv = Math.hypot(s.x - px, s.z - pz), mu = man.userData;
+    man.position.set(s.x, 0, s.z); man.rotation.y = s.yaw;
+    mu.ph += Math.min(mv, 0.08) * 7; mu.amp += ((mv > 0.0004 ? 1 : 0) - mu.amp) * Math.min(1, dt * 10);
+    var swg = Math.sin(mu.ph) * 0.55 * mu.amp;
+    legL.rotation.x = swg; legR.rotation.x = -swg; armL.rotation.x = -swg * 0.8; armR.rotation.x = swg * 0.8;
+    man.visible = mode === 'top';
+    reflectors.forEach(function (rf) { rf.visible = mode !== 'top'; });
+    if (mode === 'cam') syncCam();
+    atmo(dt);
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  window.addEventListener('resize', applyFrame);
+  setMode('walk');
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
